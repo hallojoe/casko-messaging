@@ -1,4 +1,5 @@
 using Casko.Messaging.Email.Recipients;
+using Casko.Messaging.Email.Reading;
 
 namespace Casko.Messaging.Email.Delivery;
 
@@ -11,4 +12,7 @@ public sealed record EmailDelivery
     public required IReadOnlyCollection<EmailRecipient> Recipients { get; init; }
     /// <summary>Gets the optional reply-to address.</summary>
     public EmailAddress? ReplyTo { get; init; }
+
+    /// <summary>Gets the message this outgoing delivery replies to, if any.</summary>
+    public EmailMessageReference? ReplyToMessage { get; init; }
 }

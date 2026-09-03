@@ -1,5 +1,7 @@
 using Casko.Messaging.Email.MailKit.Configuration;
 using Casko.Messaging.Email.MailKit.Mapping;
+using Casko.Messaging.Email.MailKit.Reading;
+using Casko.Messaging.Email.Reading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,6 +21,7 @@ public static class ServiceCollectionExtensions
         services.AddOptions<MailKitEmailOptions>().Bind(configuration);
         services.AddSingleton<IMimeMessageFactory, MimeMessageFactory>();
         services.AddSingleton<IEmailSender, MailKitEmailSender>();
+        services.AddSingleton<IEmailReader, MailKitEmailReader>();
         return services;
     }
 }
