@@ -106,7 +106,7 @@ app.MapPost("/email/reply", async (EmailReplyRequest request, IEmailSender sende
 
 app.MapPost("/email/support/seed", async (IConfiguration configuration, IEmailSender sender, CancellationToken cancellationToken) =>
 {
-    const string supportAddress = "support@example.test";
+    const string supportAddress = "alice@example.test";
     var customer = new EmailAddress { Address = "customer@example.test", DisplayName = "Jamie Customer" };
     var supportRequest = await SeedIncomingMessageAsync(configuration, customer, "Help needed with my order", "Hello, I need help with order #12345.", null, [], cancellationToken);
 
@@ -152,7 +152,7 @@ static async Task<EmailMessageReference> SeedIncomingMessageAsync(
         Body = new TextPart("plain") { Text = text }
     };
     message.From.Add(new MailboxAddress(from.DisplayName, from.Address));
-    message.To.Add(new MailboxAddress("Casko Support", "support@example.test"));
+    message.To.Add(new MailboxAddress("Alice", "alice@example.test"));
     if (!string.IsNullOrWhiteSpace(inReplyTo)) message.Headers[HeaderId.InReplyTo] = inReplyTo;
     if (references.Count > 0) message.Headers[HeaderId.References] = string.Join(" ", references.Distinct(StringComparer.Ordinal));
 
