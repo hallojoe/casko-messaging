@@ -1,0 +1,17 @@
+@emailApi = https://localhost:7001
+
+### Send a single plain-text email
+POST {{emailApi}}/email/single
+
+### Send one HTML email with To, Cc, Bcc, and Reply-To recipients
+POST {{emailApi}}/email/multiple-recipients
+
+### Send three independent personalized deliveries
+POST {{emailApi}}/email/personalized
+
+### Send an email with a regular attachment
+POST {{emailApi}}/email/attachment
+
+### Send an email with an inline CID image
+POST {{emailApi}}/email/inline-image
+

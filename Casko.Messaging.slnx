@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Casko.Messaging.AppHost/Casko.Messaging.AppHost.csproj" />
+    <Project Path="src/Casko.Messaging.Email.Api/Casko.Messaging.Email.Api.csproj" />
+    <Project Path="src/Casko.Messaging.Email.MailKit/Casko.Messaging.Email.MailKit.csproj" />
+    <Project Path="src/Casko.Messaging.Email/Casko.Messaging.Email.csproj" />
+  </Folder>
+</Solution>
