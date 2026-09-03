@@ -9,7 +9,9 @@ A provider-agnostic email abstraction for .NET 10, with a MailKit SMTP adapter a
 - `Casko.Messaging.Email.Api` provides development-only sample endpoints.
 - `Casko.Messaging.AppHost` starts the API and MailPit through Aspire.
 
-`EmailMessage` describes reusable content. `EmailDelivery` describes one actual delivery, including recipients and reply-to address. This supports a message with To/Cc/Bcc recipients, as well as private or personalized fan-out using multiple deliveries.
+`EmailMessage` describes reusable content. `EmailDelivery` describes one actual delivery, including recipients, reply-to address, and optional conversation parent. This supports a message with To/Cc/Bcc recipients, as well as private or personalized fan-out using multiple deliveries. Every successful send returns an `EmailDeliveryResult` containing the RFC `Message-Id` for correlation.
+
+`IEmailReader` reads provider-neutral `ReceivedEmailMessage` values from configured logical mailboxes. It uses `Message-Id`, `In-Reply-To`, and `References` to find direct and later conversation replies; opening a mailbox is read-only and does not mark messages as read.
 
 ## Run locally
 
@@ -17,7 +19,7 @@ A provider-agnostic email abstraction for .NET 10, with a MailKit SMTP adapter a
 dotnet run --project src/Casko.Messaging.AppHost
 ```
 
-Open the Aspire dashboard URL printed in the console, then open the MailPit resource. Aspire injects MailPit's SMTP connection string into the API; production-style settings remain in `Email:MailKit`.
+Open the Aspire dashboard URL printed in the console, then open the MailPit resource. Aspire injects MailPit's SMTP connection string into the API and starts GreenMail as the local `Support` IMAP mailbox. Production-style settings remain in `Email:MailKit`.
 
 The API exposes these development sample routes:
 
@@ -26,6 +28,10 @@ The API exposes these development sample routes:
 - `POST /email/personalized`
 - `POST /email/attachment`
 - `POST /email/inline-image`
+- `GET /email/mailboxes/{mailbox}/messages`
+- `GET /email/mailboxes/{mailbox}/unread`
+- `GET /email/mailboxes/{mailbox}/replies/{messageId}`
+- `POST /email/reply`
 
 For example:
 
@@ -50,7 +56,15 @@ builder.Services.AddMailKitEmail(
       "Port": 587,
       "UseSsl": false,
       "FromAddress": "noreply@example.com",
-      "FromDisplayName": "Example"
+      "FromDisplayName": "Example",
+      "Mailboxes": {
+        "Support": {
+          "Address": "support@example.com",
+          "Host": "imap.example.com",
+          "Port": 993,
+          "UseSsl": true
+        }
+      }
     }
   }
 }

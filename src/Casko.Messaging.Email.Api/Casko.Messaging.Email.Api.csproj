@@ -4,4 +4,8 @@
     <ProjectReference Include="../Casko.Messaging.Email/Casko.Messaging.Email.csproj" />
     <ProjectReference Include="../Casko.Messaging.Email.MailKit/Casko.Messaging.Email.MailKit.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Casko.OpenTelemetry.Extensions.AspNetCore" Version="1.0.1-pre" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
+  </ItemGroup>
 </Project>

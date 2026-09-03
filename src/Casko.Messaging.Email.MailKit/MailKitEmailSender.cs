@@ -18,7 +18,8 @@ internal sealed class MailKitEmailSender : IEmailSender
         _options = options.Value;
     }
 
-    public async Task SendAsync(EmailDelivery delivery, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public async Task<EmailDeliveryResult> SendAsync(EmailDelivery delivery, CancellationToken cancellationToken = default)
     {
         var message = _messageFactory.Create(delivery);
         using var client = new SmtpClient();
@@ -27,15 +28,19 @@ internal sealed class MailKitEmailSender : IEmailSender
             await client.AuthenticateAsync(_options.Username, _options.Password, cancellationToken);
         await client.SendAsync(message, cancellationToken);
         await client.DisconnectAsync(true, cancellationToken);
+        return new EmailDeliveryResult { MessageId = message.MessageId! };
     }
 
-    public async Task SendAsync(IEnumerable<EmailDelivery> deliveries, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public async Task<IReadOnlyCollection<EmailDeliveryResult>> SendAsync(IEnumerable<EmailDelivery> deliveries, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(deliveries);
+        var results = new List<EmailDeliveryResult>();
         foreach (var delivery in deliveries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await SendAsync(delivery, cancellationToken);
+            results.Add(await SendAsync(delivery, cancellationToken));
         }
+        return results;
     }
 }

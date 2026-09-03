@@ -2,6 +2,7 @@ using Casko.Messaging.Email.Attachments;
 using Casko.Messaging.Email.Delivery;
 using Casko.Messaging.Email.Recipients;
 using MimeKit;
+using MimeKit.Utils;
 
 namespace Casko.Messaging.Email.MailKit.Mapping;
 
@@ -14,7 +15,7 @@ internal sealed class MimeMessageFactory : IMimeMessageFactory
     public MimeMessage Create(EmailDelivery delivery)
     {
         Validate(delivery);
-        var message = new MimeMessage { Subject = delivery.Message.Subject };
+        var message = new MimeMessage { Subject = delivery.Message.Subject, MessageId = MimeUtils.GenerateMessageId() };
         message.From.Add(CreateAddress(new EmailAddress { Address = _options.FromAddress, DisplayName = _options.FromDisplayName }));
         foreach (var recipient in delivery.Recipients)
         {
@@ -22,6 +23,16 @@ internal sealed class MimeMessageFactory : IMimeMessageFactory
             collection.Add(CreateAddress(recipient.Address));
         }
         if (delivery.ReplyTo is not null) message.ReplyTo.Add(CreateAddress(delivery.ReplyTo));
+        if (delivery.ReplyToMessage is not null)
+        {
+            message.Headers[HeaderId.InReplyTo] = delivery.ReplyToMessage.MessageId;
+            var references = delivery.ReplyToMessage.References
+                .Append(delivery.ReplyToMessage.MessageId)
+                .Where(reference => !string.IsNullOrWhiteSpace(reference))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (references.Length > 0) message.Headers[HeaderId.References] = string.Join(" ", references);
+        }
 
         var body = new BodyBuilder { TextBody = delivery.Message.Text, HtmlBody = delivery.Message.Html };
         foreach (var attachment in delivery.Message.Attachments)
@@ -51,5 +62,6 @@ internal sealed class MimeMessageFactory : IMimeMessageFactory
         if (delivery.Recipients.Count == 0) throw new ArgumentException("At least one recipient is required.", nameof(delivery));
         if (delivery.Recipients.Any(r => r.Address is null || string.IsNullOrWhiteSpace(r.Address.Address))) throw new ArgumentException("Every recipient requires an email address.", nameof(delivery));
         if (delivery.Message.Attachments.Any(a => a.Disposition == EmailAttachmentDisposition.Inline && string.IsNullOrWhiteSpace(a.ContentId))) throw new ArgumentException("Inline attachments require a content ID.", nameof(delivery));
+        if (delivery.ReplyToMessage is not null && string.IsNullOrWhiteSpace(delivery.ReplyToMessage.MessageId)) throw new ArgumentException("A reply-to message requires a message ID.", nameof(delivery));
     }
 }

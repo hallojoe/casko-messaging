@@ -17,4 +17,7 @@ public sealed class MailKitEmailOptions
     public required string FromAddress { get; set; }
     /// <summary>Gets or sets the optional sender display name.</summary>
     public string? FromDisplayName { get; set; }
+
+    /// <summary>Gets or sets receiving mailboxes by their logical identifier.</summary>
+    public Dictionary<string, MailKitMailboxOptions> Mailboxes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
