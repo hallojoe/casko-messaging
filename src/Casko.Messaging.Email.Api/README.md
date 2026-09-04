@@ -10,6 +10,18 @@ Run through `Casko.Messaging.AppHost` for automatic MailPit and GreenMail config
 
 `Email.Single.http` and `Email.Scenarios.http` contain ready-to-run sample requests. The API covers basic delivery, recipient variants, attachments, inline images, personalized messages, IMAP reads, reply discovery, and seeded support conversations.
 
+## Inbox viewer and OpenAPI
+
+The root URL serves an interactive MudBlazor inbox viewer. It discovers configured logical mailboxes, lists their mailbox-local threads, and displays a selected thread as a nested conversation. In the Aspire development environment, `Support` uses Alice's GreenMail inbox and `Sales` uses Bob's.
+
+Seed both demo inboxes with `POST /email/demo/seed`. The viewer-ready endpoints are:
+
+- `GET /api/mailboxes`
+- `GET /api/mailboxes/{mailbox}/threads`
+- `GET /api/mailboxes/{mailbox}/threads/{threadId}`
+
+The .NET 10 OpenAPI document is available in Development at `/openapi/v1.json`.
+
 ## Configuration
 
 - `Email:MailKit` configures the production-style sender and reader.

@@ -1,0 +1,19 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Color="Color.Primary" Elevation="1">
+        <MudText Typo="Typo.h6">Casko Messaging</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.body2">Inbox thread viewer</MudText>
+    </MudAppBar>
+    <MudMainContent Class="pt-16">
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>

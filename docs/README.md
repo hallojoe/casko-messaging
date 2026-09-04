@@ -25,7 +25,7 @@ Open the Aspire dashboard URL printed in the console. It exposes these developme
 - **GreenMail** provides the IMAP mailbox server used by the API reader.
 - **Roundcube** is the mailbox UI: it reads GreenMail over IMAP and sends messages through MailPit SMTP.
 
-Roundcube and the API can log into GreenMail with either `alice@example.test` / `password` or `bob@example.test` / `password`. The API's logical `Support` mailbox uses Alice for local development. Aspire injects dynamic endpoint information; production settings remain under `Email:MailKit`.
+Roundcube and the API can log into GreenMail with either `alice@example.test` / `password` or `bob@example.test` / `password`. The API exposes Alice as the local `Support` inbox and Bob as the local `Sales` inbox. Aspire injects dynamic endpoint information; production settings remain under `Email:MailKit`.
 
 Roundcube intentionally sends to MailPit without SMTP authentication, because the local MailPit resource accepts unauthenticated SMTP.
 
@@ -41,6 +41,19 @@ The API exposes these development sample routes:
 - `GET /email/mailboxes/{mailbox}/replies/{messageId}`
 - `POST /email/reply`
 - `POST /email/support/seed`
+- `POST /email/demo/seed`
+
+## Inbox thread viewer
+
+The API host also serves a development inbox viewer at its root URL. It lists the configured GreenMail inboxes, displays each inbox's mailbox-local conversation threads, and renders a selected thread recursively. HTML mail is sanitized before it is displayed and attachment payload bytes are not exposed by the viewer API.
+
+Seed both local inboxes with:
+
+```bash
+curl -X POST http://localhost:5000/email/demo/seed
+```
+
+UI-oriented API routes are `GET /api/mailboxes`, `GET /api/mailboxes/{mailbox}/threads`, and `GET /api/mailboxes/{mailbox}/threads/{threadId}`. In Development, the generated .NET OpenAPI document is available at `/openapi/v1.json`.
 
 For example:
 

@@ -1,7 +1,7 @@
 using Casko.Messaging.Email.Delivery;
 using Casko.Messaging.Email.Recipients;
 
-namespace Casko.Messaging.Email;
+namespace Casko.Messaging.Email.Extensions;
 
 /// <summary>Provides provider-independent convenience methods for sending email.</summary>
 public static class EmailSenderExtensions

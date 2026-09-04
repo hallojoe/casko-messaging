@@ -43,3 +43,12 @@ Content-Type: application/json
 ### Seed one incoming support request and two threaded customer replies
 # Copy applicationReply.messageId from the response into the replies request above.
 POST {{emailApi}}/email/support/seed
+
+### Seed both inboxes for the thread viewer
+POST {{emailApi}}/email/demo/seed
+
+### List selectable inboxes for the thread viewer
+GET {{emailApi}}/api/mailboxes
+
+### List threads in the Support inbox
+GET {{emailApi}}/api/mailboxes/Support/threads

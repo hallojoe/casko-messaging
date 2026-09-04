@@ -1,0 +1,48 @@
+@if (Depth > 0)
+{
+    <div class="thread-branch" style="margin-left: @(Math.Min(Depth, 3) * 20)px">
+        @MessageCard
+    </div>
+}
+else
+{
+    @MessageCard
+}
+
+@code {
+    [Parameter, EditorRequired] public required EmailThreadMessageResponse Message { get; set; }
+    [Parameter] public int Depth { get; set; }
+}
+
+@code {
+    private RenderFragment MessageCard => @<MudPaper Class="pa-3 mb-3" Outlined="true">
+        <MudText Typo="Typo.subtitle2">@(Message.From.DisplayName ?? Message.From.Address)</MudText>
+        <MudText Typo="Typo.caption">@Message.From.Address · @Message.ReceivedAt.LocalDateTime.ToString("g")</MudText>
+        @if (Message.Recipients.Count > 0)
+        {
+            <MudText Typo="Typo.caption">To: @string.Join(", ", Message.Recipients.Select(recipient => recipient.Address.Address))</MudText>
+        }
+        <MudDivider Class="my-2" />
+        @if (!string.IsNullOrWhiteSpace(Message.Html))
+        {
+            <div class="email-body">@((MarkupString)Message.Html)</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(Message.Text))
+        {
+            <MudText Class="email-text">@Message.Text</MudText>
+        }
+        @if (Message.Attachments.Count > 0)
+        {
+            <MudChipSet T="string" Class="mt-2">
+                @foreach (var attachment in Message.Attachments)
+                {
+                    <MudChip T="string" Value="@attachment.FileName" Size="Size.Small">@attachment.FileName (@attachment.ContentType)</MudChip>
+                }
+            </MudChipSet>
+        }
+        @foreach (var child in Message.Children)
+        {
+            <MessageNode Message="child" Depth="@(Depth + 1)" />
+        }
+    </MudPaper>;
+}

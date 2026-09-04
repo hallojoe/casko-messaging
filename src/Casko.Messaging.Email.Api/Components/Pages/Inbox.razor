@@ -1,0 +1,104 @@
+@page "/"
+@rendermode InteractiveServer
+@inject InboxQueryService InboxQuery
+
+<PageTitle>Inbox thread viewer</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else
+{
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Inboxes</MudText>
+                @foreach (var mailbox in _mailboxes)
+                {
+                    <MudButton FullWidth="true" Variant="@(mailbox.Id == _selectedMailbox?.Id ? Variant.Filled : Variant.Text)" Color="Color.Primary" OnClick="@(() => SelectMailboxAsync(mailbox))" Class="justify-start mb-1">
+                        <div class="text-left"><div>@mailbox.DisplayName</div><small>@mailbox.Address</small></div>
+                    </MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">@(_selectedMailbox?.DisplayName ?? "Inbox") threads</MudText>
+                @if (_threads.Count == 0)
+                {
+                    <MudText Color="Color.Secondary">No messages yet. Seed the demo inboxes, then refresh.</MudText>
+                }
+                @foreach (var thread in _threads)
+                {
+                    <MudCard Class="mb-2 thread-card" @onclick="@(() => SelectThreadAsync(thread.Id))">
+                        <MudCardContent Class="pa-3">
+                            <MudText Typo="Typo.subtitle1">@(thread.Subject ?? "(no subject)")</MudText>
+                            <MudText Typo="Typo.body2">@thread.Participant · @thread.MessageCount message@(thread.MessageCount == 1 ? "" : "s")</MudText>
+                            @if (!string.IsNullOrWhiteSpace(thread.Preview))
+                            {
+                                <MudText Typo="Typo.caption" Class="thread-preview">@thread.Preview</MudText>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-3" Elevation="1">
+                @if (_selectedThread is null)
+                {
+                    <MudText Color="Color.Secondary">Select a thread to read the conversation.</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.h6" Class="mb-3">@(_selectedThread.Subject ?? "(no subject)")</MudText>
+                    <MessageNode Message="_selectedThread.Root" Depth="0" />
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private IReadOnlyCollection<MailboxResponse> _mailboxes = [];
+    private IReadOnlyCollection<EmailThreadSummaryResponse> _threads = [];
+    private MailboxResponse? _selectedMailbox;
+    private EmailThreadResponse? _selectedThread;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _mailboxes = InboxQuery.GetMailboxes();
+            if (_mailboxes.FirstOrDefault() is { } mailbox) await SelectMailboxAsync(mailbox);
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectMailboxAsync(MailboxResponse mailbox)
+    {
+        _selectedMailbox = mailbox;
+        _selectedThread = null;
+        _threads = await InboxQuery.GetThreadsAsync(mailbox.Id, CancellationToken.None);
+    }
+
+    private async Task SelectThreadAsync(string threadId)
+    {
+        if (_selectedMailbox is null) return;
+        _selectedThread = await InboxQuery.GetThreadAsync(_selectedMailbox.Id, threadId, CancellationToken.None);
+    }
+}

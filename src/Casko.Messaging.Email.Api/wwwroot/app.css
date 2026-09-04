@@ -1,0 +1,7 @@
+html, body { font-family: Arial, Helvetica, sans-serif; background: #f7f8fa; }
+.thread-card { cursor: pointer; }
+.thread-card:hover { background: #f1f7ff; }
+.thread-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-branch { border-left: 2px solid #d7dee8; padding-left: 12px; }
+.email-body { overflow-wrap: anywhere; }
+.email-text { white-space: pre-wrap; }

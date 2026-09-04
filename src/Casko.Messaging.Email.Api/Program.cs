@@ -1,19 +1,30 @@
 using System.Text;
 using Casko.Messaging.Email;
+using Casko.Messaging.Email.Api.Components;
+using Casko.Messaging.Email.Api.Contracts;
+using Casko.Messaging.Email.Api.Services;
 using Casko.Messaging.Email.Attachments;
 using Casko.Messaging.Email.Delivery;
+using Casko.Messaging.Email.Extensions;
+using Casko.Messaging.Email.MailKit.Configuration;
 using Casko.Messaging.Email.MailKit.DependencyInjection;
 using Casko.Messaging.Email.Reading;
 using Casko.Messaging.Email.Recipients;
+using Casko.Messaging.Email.Threading;
 using Casko.OpenTelemetry.Extensions.AspNetCore;
+using Ganss.Xss;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using MimeKit.Utils;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddOpinionatedOpenTelemetry();
+builder.Services.AddOpenApi();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddMudServices();
 
 var mailPitConnection = builder.Configuration.GetConnectionString("mailpit");
 if (!string.IsNullOrWhiteSpace(mailPitConnection))
@@ -30,7 +41,14 @@ if (!string.IsNullOrWhiteSpace(mailPitConnection))
 }
 
 builder.Services.AddMailKitEmail(builder.Configuration.GetSection("Email:MailKit"));
+builder.Services.AddSingleton<IEmailThreadBuilder, EmailThreadBuilder>();
+builder.Services.AddSingleton<HtmlSanitizer>();
+builder.Services.AddScoped<InboxQueryService>();
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
+app.UseAntiforgery();
+app.MapStaticAssets();
 
 var senderAddress = new EmailAddress { Address = "support@casko.dev.local", DisplayName = "Casko Support" };
 var alice = new EmailAddress { Address = "alice@example.local", DisplayName = "Alice" };
@@ -93,6 +111,27 @@ app.MapGet("/email/mailboxes/{mailbox}/unread", async (string mailbox, IEmailRea
 app.MapGet("/email/mailboxes/{mailbox}/replies/{messageId}", async (string mailbox, string messageId, IEmailReader reader, CancellationToken cancellationToken) =>
     Results.Ok(await reader.FindRepliesAsync(new EmailMailboxId(mailbox), new EmailMessageReference { MessageId = messageId }, cancellationToken)));
 
+var inboxApi = app.MapGroup("/api").WithTags("Inbox viewer");
+inboxApi.MapGet("/mailboxes", (InboxQueryService inboxes) => Results.Ok(inboxes.GetMailboxes()))
+    .WithName("GetMailboxes")
+    .Produces<IReadOnlyCollection<MailboxResponse>>();
+inboxApi.MapGet("/mailboxes/{mailbox}/threads", async (string mailbox, InboxQueryService inboxes, CancellationToken cancellationToken) =>
+    !inboxes.GetMailboxes().Any(configured => string.Equals(configured.Id, mailbox, StringComparison.OrdinalIgnoreCase))
+        ? Results.NotFound()
+        : Results.Ok(await inboxes.GetThreadsAsync(mailbox, cancellationToken)))
+    .WithName("GetMailboxThreads")
+    .Produces<IReadOnlyCollection<EmailThreadSummaryResponse>>()
+    .Produces(StatusCodes.Status404NotFound);
+inboxApi.MapGet("/mailboxes/{mailbox}/threads/{threadId}", async (string mailbox, string threadId, InboxQueryService inboxes, CancellationToken cancellationToken) =>
+{
+    if (!inboxes.GetMailboxes().Any(configured => string.Equals(configured.Id, mailbox, StringComparison.OrdinalIgnoreCase))) return Results.NotFound();
+    var thread = await inboxes.GetThreadAsync(mailbox, threadId, cancellationToken);
+    return thread is null ? Results.NotFound() : Results.Ok(thread);
+})
+    .WithName("GetMailboxThread")
+    .Produces<EmailThreadResponse>()
+    .Produces(StatusCodes.Status404NotFound);
+
 app.MapPost("/email/reply", async (EmailReplyRequest request, IEmailSender sender, CancellationToken cancellationToken) =>
 {
     var result = await sender.SendAsync(new EmailDelivery
@@ -134,9 +173,38 @@ app.MapPost("/email/support/seed", async (IConfiguration configuration, IEmailSe
     });
 });
 
+app.MapPost("/email/demo/seed", async (IConfiguration configuration, CancellationToken cancellationToken) =>
+{
+    var support = await SeedConversationAsync(configuration, "alice@example.test", "customer@example.test", "Casko Support", "Help needed with my order", cancellationToken);
+    var sales = await SeedConversationAsync(configuration, "bob@example.test", "prospect@example.test", "Casko Sales", "Question about enterprise pricing", cancellationToken);
+    return Results.Created("/", new { support, sales });
+}).WithTags("Demo data");
+
 static async Task<EmailMessageReference> SeedIncomingMessageAsync(
     IConfiguration configuration,
     EmailAddress from,
+    string subject,
+    string text,
+    string? inReplyTo,
+    IReadOnlyCollection<string> references,
+    CancellationToken cancellationToken)
+    => await SeedMessageAsync(configuration, from, "alice@example.test", subject, text, inReplyTo, references, cancellationToken);
+
+static async Task<object> SeedConversationAsync(IConfiguration configuration, string recipient, string customerAddress, string teamName, string subject, CancellationToken cancellationToken)
+{
+    var customer = new EmailAddress { Address = customerAddress, DisplayName = "Jamie Customer" };
+    var team = new EmailAddress { Address = $"{teamName.ToLowerInvariant().Replace(" ", ".")}@example.test", DisplayName = teamName };
+    var root = await SeedMessageAsync(configuration, customer, recipient, subject, "Hello, I need some help.", null, [], cancellationToken);
+    var reply = await SeedMessageAsync(configuration, team, recipient, $"Re: {subject}", "Thanks for contacting us. We are looking into it.", root.MessageId, [root.MessageId], cancellationToken);
+    var followUp = await SeedMessageAsync(configuration, customer, recipient, $"Re: {subject}", "Thank you. Could you share the next steps?", reply.MessageId, [root.MessageId, reply.MessageId], cancellationToken);
+    var finalReply = await SeedMessageAsync(configuration, team, recipient, $"Re: {subject}", "Certainly. We will follow up shortly.", followUp.MessageId, [root.MessageId, reply.MessageId, followUp.MessageId], cancellationToken);
+    return new { root, reply, followUp, finalReply };
+}
+
+static async Task<EmailMessageReference> SeedMessageAsync(
+    IConfiguration configuration,
+    EmailAddress from,
+    string recipient,
     string subject,
     string text,
     string? inReplyTo,
@@ -152,7 +220,7 @@ static async Task<EmailMessageReference> SeedIncomingMessageAsync(
         Body = new TextPart("plain") { Text = text }
     };
     message.From.Add(new MailboxAddress(from.DisplayName, from.Address));
-    message.To.Add(new MailboxAddress("Alice", "alice@example.test"));
+    message.To.Add(new MailboxAddress(recipient, recipient));
     if (!string.IsNullOrWhiteSpace(inReplyTo)) message.Headers[HeaderId.InReplyTo] = inReplyTo;
     if (references.Count > 0) message.Headers[HeaderId.References] = string.Join(" ", references.Distinct(StringComparer.Ordinal));
 
@@ -167,6 +235,9 @@ static async Task<EmailMessageReference> SeedIncomingMessageAsync(
 
     return new EmailMessageReference { MessageId = message.MessageId!, References = references };
 }
+
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 app.Run();
 
