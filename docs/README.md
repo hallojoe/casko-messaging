@@ -27,6 +27,8 @@ Open the Aspire dashboard URL printed in the console. It exposes these developme
 
 Roundcube and the API can log into GreenMail with either `alice@example.test` / `password` or `bob@example.test` / `password`. The API's logical `Support` mailbox uses Alice for local development. Aspire injects dynamic endpoint information; production settings remain under `Email:MailKit`.
 
+Roundcube intentionally sends to MailPit without SMTP authentication, because the local MailPit resource accepts unauthenticated SMTP.
+
 The API exposes these development sample routes:
 
 - `POST /email/single`
