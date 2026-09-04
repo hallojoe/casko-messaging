@@ -15,3 +15,31 @@ POST {{emailApi}}/email/attachment
 ### Send an email with an inline CID image
 POST {{emailApi}}/email/inline-image
 
+### Read all messages from the configured Support IMAP mailbox
+GET {{emailApi}}/email/mailboxes/Support/messages
+
+### Read only unread messages from the configured Support IMAP mailbox
+GET {{emailApi}}/email/mailboxes/Support/unread
+
+### Find all conversation messages related to a known RFC Message-Id
+GET {{emailApi}}/email/mailboxes/Support/replies/%3Cknown-message-id%40example.com%3E
+
+### Reply to an incoming message while preserving its threading headers
+POST {{emailApi}}/email/reply
+Content-Type: application/json
+
+{
+  "messageId": "<known-message-id@example.com>",
+  "references": ["<root-message-id@example.com>"],
+  "recipient": {
+    "address": "customer@example.test",
+    "displayName": "Customer"
+  },
+  "subject": "Re: Your request",
+  "text": "Thanks for your message.",
+  "html": "<p>Thanks for your message.</p>"
+}
+
+### Seed one incoming support request and two threaded customer replies
+# Copy applicationReply.messageId from the response into the replies request above.
+POST {{emailApi}}/email/support/seed

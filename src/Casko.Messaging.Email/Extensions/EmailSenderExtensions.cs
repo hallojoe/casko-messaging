@@ -7,14 +7,14 @@ namespace Casko.Messaging.Email;
 public static class EmailSenderExtensions
 {
     /// <summary>Sends a message to one primary recipient.</summary>
-    public static Task SendAsync(this IEmailSender sender, EmailAddress recipient, EmailMessage message, CancellationToken cancellationToken = default)
+    public static Task<EmailDeliveryResult> SendAsync(this IEmailSender sender, EmailAddress recipient, EmailMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sender);
         return sender.SendAsync(new EmailDelivery { Message = message, Recipients = [new EmailRecipient { Address = recipient }] }, cancellationToken);
     }
 
     /// <summary>Sends one message to multiple primary recipients.</summary>
-    public static Task SendAsync(this IEmailSender sender, IEnumerable<EmailAddress> recipients, EmailMessage message, CancellationToken cancellationToken = default)
+    public static Task<EmailDeliveryResult> SendAsync(this IEmailSender sender, IEnumerable<EmailAddress> recipients, EmailMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sender);
         ArgumentNullException.ThrowIfNull(recipients);
