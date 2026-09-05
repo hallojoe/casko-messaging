@@ -3,7 +3,6 @@ using System.Threading.RateLimiting;
 using System.Threading.Channels;
 using Casko.Messaging.Email.BulkDelivery;
 using Casko.Messaging.Email.MailKit.Configuration;
-using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
