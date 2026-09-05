@@ -33,11 +33,14 @@ public abstract class NotificationPersistenceContract
     public async Task Supports_ten_thousand_recipients_and_replay()
     {
         var input = Input("shared", Enumerable.Range(0, 10_000).Select(i => new RecipientInput($"user{i}@example.test")).ToArray());
-        var first = Assert.Single((await Write(input)).Notifications);
+        var firstResult = await Write(input);
+        var first = Assert.Single(firstResult.Notifications);
         Assert.True(first.Created);
         Assert.Equal(10_000, first.AddedRecipients);
-        var replay = Assert.Single((await Write(input)).Notifications);
+        var replayResult = await Write(input);
+        var replay = Assert.Single(replayResult.Notifications);
         Assert.Equal(first.Id, replay.Id);
+        Assert.Equal(firstResult.DeliveryBatchId, replayResult.DeliveryBatchId);
         Assert.False(replay.Created);
         Assert.Equal(0, replay.AddedRecipients);
         Assert.Equal(10_000, replay.ExistingRecipients);
@@ -138,6 +141,58 @@ public abstract class NotificationPersistenceContract
         await Write(Input("same", new RecipientInput("a@example.test")) with { Priority = NotificationPriority.Normal });
         await Assert.ThrowsAsync<NotificationConflictException>(() => Write(
             Input("same", new RecipientInput("a@example.test")) with { Priority = NotificationPriority.Critical }));
+    }
+
+    [SqlFact]
+    public async Task Aggregates_batch_status_from_delivery_rows_and_isolates_batches()
+    {
+        var batchId = Guid.NewGuid();
+        var otherBatchId = Guid.NewGuid();
+        var items = Enumerable.Range(0, 100).Select(index => Input($"status-{index}", new RecipientInput($"status-{index}@example.test"))).ToArray();
+        using (var scope = OpenScope())
+        {
+            var writer = scope.ServiceProvider.GetRequiredService<INotificationWriter>();
+            var created = await writer.CreateBatchAsync(new(items, batchId), default);
+            Assert.Equal(batchId, created.DeliveryBatchId);
+            await writer.CreateBatchAsync(new([Input("other-status", new RecipientInput("other@example.test"))], otherBatchId), default);
+            var context = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+            var deliveries = await context.NotificationDeliveries.Where(d => d.DeliveryBatchId == batchId).OrderBy(d => d.Id).ToArrayAsync();
+            foreach (var delivery in deliveries.Take(60)) delivery.Status = NotificationDeliveryStatus.Sent;
+            foreach (var delivery in deliveries.Skip(60).Take(5)) delivery.Status = NotificationDeliveryStatus.Failed;
+            foreach (var delivery in deliveries.Skip(65).Take(10)) delivery.Status = NotificationDeliveryStatus.Retry;
+            foreach (var delivery in deliveries.Skip(75).Take(5)) delivery.Status = NotificationDeliveryStatus.Processing;
+            await context.SaveChangesAsync();
+        }
+        using var resultScope = OpenScope();
+        var statusService = resultScope.ServiceProvider.GetRequiredService<INotificationDeliveryStatus>();
+        var status = await statusService.GetAsync(batchId);
+        Assert.Equal(new DeliveryBatchStatus(batchId, 100, 20, 5, 10, 60, 5), status);
+        Assert.Equal(65, status!.Completed);
+        Assert.Equal(65, status.Progress);
+        Assert.False(status.IsComplete);
+        Assert.Null(await statusService.GetAsync(Guid.NewGuid()));
+        var other = await statusService.GetAsync(otherBatchId);
+        Assert.Equal(1, other!.Total);
+        Assert.Equal(1, other.Pending);
+    }
+
+    [SqlFact]
+    public async Task Reports_completed_batches_with_and_without_terminal_failures()
+    {
+        var successful = Guid.NewGuid();
+        var failed = Guid.NewGuid();
+        using var scope = OpenScope();
+        var writer = scope.ServiceProvider.GetRequiredService<INotificationWriter>();
+        await writer.CreateBatchAsync(new(Enumerable.Range(0, 10).Select(i => Input($"success-{i}", new RecipientInput($"success-{i}@example.test"))).ToArray(), successful), default);
+        await writer.CreateBatchAsync(new(Enumerable.Range(0, 10).Select(i => Input($"failed-{i}", new RecipientInput($"failed-{i}@example.test"))).ToArray(), failed), default);
+        var context = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+        await context.NotificationDeliveries.Where(d => d.DeliveryBatchId == successful).ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, NotificationDeliveryStatus.Sent));
+        await context.NotificationDeliveries.Where(d => d.DeliveryBatchId == failed).ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, NotificationDeliveryStatus.Failed));
+        var status = scope.ServiceProvider.GetRequiredService<INotificationDeliveryStatus>();
+        var success = await status.GetAsync(successful);
+        var failures = await status.GetAsync(failed);
+        Assert.True(success!.IsComplete); Assert.Equal(100, success.Progress); Assert.Equal(0, success.Failed);
+        Assert.True(failures!.IsComplete); Assert.Equal(100, failures.Progress); Assert.Equal(10, failures.Failed);
     }
 
     [SqlFact]
@@ -333,7 +388,7 @@ public sealed class SqlServerNotificationPersistenceTests(ITestOutputHelper outp
         var first = Assert.Single((await Write(Input("migration", new RecipientInput("a@example.test")))).Notifications);
         using var scope = OpenScope();
         var context = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
-        Assert.Equal(["20260904200400_InitialNotifications", "20260905190000_AddNotificationPriority"], await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(["20260904200400_InitialNotifications", "20260905190000_AddNotificationPriority", "20260905200000_AddDeliveryBatchId"], await context.Database.GetAppliedMigrationsAsync());
         await scope.ServiceProvider.GetRequiredService<INotificationStoreInitializer>().InitializeAsync();
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.False(context.Database.HasPendingModelChanges());
@@ -350,6 +405,36 @@ public sealed class SqlServerNotificationPersistenceTests(ITestOutputHelper outp
         Assert.Equal(1, result.DuplicateRecipients);
         using var scope = OpenScope();
         Assert.Equal(recipientId, (await scope.ServiceProvider.GetRequiredService<NotificationDbContext>().NotificationDeliveries.SingleAsync()).RecipientId);
+    }
+
+    [SqlFact]
+    public async Task Status_aggregates_one_hundred_thousand_deliveries_in_one_database_command()
+    {
+        var deliveryBatchId = Guid.NewGuid();
+        long eventId;
+        using (var scope = OpenScope())
+        {
+            var result = await scope.ServiceProvider.GetRequiredService<INotificationWriter>().CreateBatchAsync(
+                new([Input("status-scale", new RecipientInput("seed@example.test"))], deliveryBatchId), default);
+            eventId = Assert.Single(result.Notifications).Id;
+            var context = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                WITH Numbers AS (
+                    SELECT TOP (99999) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS Number
+                    FROM sys.all_objects AS firstObject CROSS JOIN sys.all_objects AS secondObject)
+                INSERT dbo.NotificationDeliveries
+                    (NotificationEventId, EmailAddress, NormalizedEmailAddress, DeliveryBatchId, Priority, Status, Attempts, CreatedUtc)
+                SELECT {eventId}, CONCAT('scale', Number, '@example.test'), CONCAT('SCALE', Number, '@EXAMPLE.TEST'),
+                    {deliveryBatchId}, 1, 0, 0, SYSUTCDATETIME()
+                FROM Numbers;
+                """);
+        }
+
+        using var resultScope = OpenScope();
+        using var commands = new SqlCommandCounter();
+        var status = await resultScope.ServiceProvider.GetRequiredService<INotificationDeliveryStatus>().GetAsync(deliveryBatchId);
+        Assert.Equal(new DeliveryBatchStatus(deliveryBatchId, 100_000, 100_000, 0, 0, 0, 0), status);
+        Assert.Equal(1, commands.Count);
     }
 }
 

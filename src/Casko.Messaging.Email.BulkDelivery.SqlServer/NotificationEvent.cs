@@ -8,6 +8,7 @@ public sealed class NotificationEvent
     public required string Template { get; set; }
     public required string Payload { get; set; }
     public required string IdempotencyKey { get; set; }
+    public Guid? DeliveryBatchId { get; set; }
     public NotificationPriority Priority { get; set; } = NotificationPriority.Normal;
     public DateTimeOffset CreatedUtc { get; set; }
     public ICollection<NotificationDelivery> Deliveries { get; } = new List<NotificationDelivery>();

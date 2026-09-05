@@ -35,7 +35,7 @@ public static class BulkDeliveryEndpoints
         group.MapPost("", async (CreateNotificationEventRequest request, INotificationWriter writer, CancellationToken ct) =>
         {
             var notification = await writer.CreateEventAsync(request, ct);
-            return Results.Accepted($"/api/notifications/{notification.Id}", new { notification.Id, notification.CreatedUtc });
+            return Results.Accepted($"/api/notifications/{notification.Id}", new { notification.Id, notification.CreatedUtc, notification.DeliveryBatchId });
         });
         group.MapPost("/batch", async (NotificationBatchRequest request, INotificationWriter writer, CancellationToken ct) =>
             Results.Ok(await writer.CreateBatchAsync(request, ct)));

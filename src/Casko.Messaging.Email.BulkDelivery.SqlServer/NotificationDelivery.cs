@@ -8,6 +8,7 @@ public sealed class NotificationDelivery
     public Guid? RecipientId { get; set; }
     public required string EmailAddress { get; set; }
     public required string NormalizedEmailAddress { get; set; }
+    public Guid? DeliveryBatchId { get; set; }
     public NotificationPriority Priority { get; set; } = NotificationPriority.Normal;
     public NotificationDeliveryStatus Status { get; set; } = NotificationDeliveryStatus.Pending;
     public int Attempts { get; set; }

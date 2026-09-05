@@ -12,6 +12,12 @@ UPDLOCK/HOLDLOCK protects checks against concurrent writers; existing unique ind
 
 Queue claims retain the existing atomic UPDATE/OUTPUT and live-lease checks. The SQL-specific RowVersion is not part of shared contracts.
 
+## Delivery-batch status
+
+The `20260905200000_AddDeliveryBatchId` migration adds nullable `DeliveryBatchId` columns and the `(DeliveryBatchId, Status)` delivery index. New batch writes stamp both the event and every delivery with the request's correlation ID. Older rows remain null and are deliberately not backfilled.
+
+`INotificationDeliveryStatus` uses one grouped SQL query over `NotificationDeliveries`; it does not load deliveries into application memory or maintain counters. It reports Pending, Processing, Retry, Sent, and Failed totals, so a batch is complete only when Pending, Processing, and Retry are all zero. A newly submitted batch is invisible to this query until its enclosing ingestion transaction commits.
+
 ## Priority and lanes
 
 The priority claim order is Critical, Normal, then Bulk; each priority remains FIFO by CreatedUtc and ID. The claim query uses the `IX_NotificationDeliveries_Status_Priority_CreatedUtc_Id` index introduced by the priority migration. Bulk rows age into Normal ordering after the configured `BulkPromotionAfter` interval, so a continuous normal workload cannot starve old campaigns.

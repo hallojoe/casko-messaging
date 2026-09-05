@@ -36,6 +36,7 @@ if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapBulkDeliveryEndpoints();
+app.MapDeliveryStatusEndpoints();
 app.MapEmailSenderEndpoints();
 app.MapDemoFlowsEndpoints();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();

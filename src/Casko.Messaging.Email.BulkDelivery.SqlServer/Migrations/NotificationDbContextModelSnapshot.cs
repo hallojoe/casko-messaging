@@ -36,6 +36,9 @@ namespace Casko.Messaging.Email.BulkDelivery.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid?>("DeliveryBatchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("EmailAddress")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -96,6 +99,8 @@ namespace Casko.Messaging.Email.BulkDelivery.Migrations
                     b.HasIndex("NotificationEventId", "NormalizedEmailAddress")
                         .IsUnique();
 
+                    b.HasIndex("DeliveryBatchId", "Status");
+
                     b.HasIndex("Status", "NextAttemptUtc");
 
                     b.HasIndex("Status", "ProcessingLeaseUntilUtc");
@@ -117,6 +122,9 @@ namespace Casko.Messaging.Email.BulkDelivery.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("DeliveryBatchId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("EventType")

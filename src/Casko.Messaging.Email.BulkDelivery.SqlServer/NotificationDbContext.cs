@@ -28,5 +28,6 @@ public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext
         deliveries.HasIndex(x => new { x.Status, x.NextAttemptUtc });
         deliveries.HasIndex(x => new { x.Status, x.ProcessingLeaseUntilUtc });
         deliveries.HasIndex(x => new { x.Status, x.Priority, x.CreatedUtc, x.Id });
+        deliveries.HasIndex(x => new { x.DeliveryBatchId, x.Status });
     }
 }

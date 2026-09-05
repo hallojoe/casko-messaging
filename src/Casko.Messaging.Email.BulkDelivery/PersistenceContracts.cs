@@ -15,12 +15,14 @@ public sealed record NotificationInput(Guid EntityId, string EventType, string T
 
 /// <summary>Groups notification events that must be created atomically.</summary>
 /// <param name="Notifications">The notification events to create.</param>
-public sealed record NotificationBatchRequest(IReadOnlyList<NotificationInput> Notifications);
+/// <param name="DeliveryBatchId">The optional stable correlation identifier; one is generated when omitted.</param>
+public sealed record NotificationBatchRequest(IReadOnlyList<NotificationInput> Notifications, Guid? DeliveryBatchId = null);
 
 /// <summary>Identifies a durable notification event created or found by an idempotent request.</summary>
 /// <param name="Id">The durable event identifier.</param>
 /// <param name="CreatedUtc">The timestamp at which the event was first created.</param>
-public sealed record NotificationEventResult(long Id, DateTimeOffset CreatedUtc);
+/// <param name="DeliveryBatchId">The batch that owns deliveries created for this event.</param>
+public sealed record NotificationEventResult(long Id, DateTimeOffset CreatedUtc, Guid DeliveryBatchId);
 
 /// <summary>Reports the committed outcome for one distinct notification event key.</summary>
 /// <param name="IdempotencyKey">The event key supplied by the caller.</param>
@@ -36,7 +38,26 @@ public sealed record NotificationWriteResult(string IdempotencyKey, long Id, Dat
 
 /// <summary>Reports the committed outcome of an atomic notification batch.</summary>
 /// <param name="Notifications">One result for each distinct notification event key.</param>
-public sealed record NotificationBatchResult(IReadOnlyList<NotificationWriteResult> Notifications);
+/// <param name="DeliveryBatchId">The stable identifier for the logical delivery batch.</param>
+public sealed record NotificationBatchResult(IReadOnlyList<NotificationWriteResult> Notifications, Guid DeliveryBatchId = default);
+
+/// <summary>Reports the current aggregate state of one persisted delivery batch.</summary>
+/// <param name="DeliveryBatchId">The identifier of the batch queried.</param>
+/// <param name="Total">The total persisted deliveries in the batch.</param>
+/// <param name="Pending">Deliveries eligible to be claimed.</param>
+/// <param name="Processing">Deliveries currently leased by workers.</param>
+/// <param name="Retrying">Deliveries waiting for a scheduled retry.</param>
+/// <param name="Delivered">Deliveries accepted by SMTP.</param>
+/// <param name="Failed">Deliveries that failed permanently.</param>
+public sealed record DeliveryBatchStatus(Guid DeliveryBatchId, long Total, long Pending, long Processing, long Retrying, long Delivered, long Failed)
+{
+    /// <summary>Gets the total number of terminal deliveries.</summary>
+    public long Completed => Delivered + Failed;
+    /// <summary>Gets the completion percentage in the range 0 through 100.</summary>
+    public double Progress => Total == 0 ? 100 : (double)Completed / Total * 100;
+    /// <summary>Gets whether no delivery remains pending, leased, or scheduled for retry.</summary>
+    public bool IsComplete => Pending == 0 && Processing == 0 && Retrying == 0;
+}
 
 /// <summary>Writes notification events and recipient deliveries durably and idempotently.</summary>
 public interface INotificationWriter
@@ -112,6 +133,16 @@ public interface INotificationQueueStore
     /// <param name="cancellationToken">Cancels the update attempt.</param>
     /// <returns><see langword="true"/> when the delivery was reset; otherwise, <see langword="false"/>.</returns>
     Task<bool> RetryAsync(long id, CancellationToken cancellationToken);
+}
+
+/// <summary>Retrieves database-aggregated progress for durable delivery batches.</summary>
+public interface INotificationDeliveryStatus
+{
+    /// <summary>Retrieves the current status for a batch.</summary>
+    /// <param name="deliveryBatchId">The batch identifier returned when it was queued.</param>
+    /// <param name="cancellationToken">Cancels the database query.</param>
+    /// <returns>The aggregate status, or <see langword="null"/> when no persisted deliveries belong to the batch.</returns>
+    Task<DeliveryBatchStatus?> GetAsync(Guid deliveryBatchId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Restricts a queue claim to a range of priorities and controls bulk aging.</summary>

@@ -25,24 +25,24 @@ public sealed class SqlServerNotificationWriter(
         var result = await CreateBatchAsync(new([new(request.EntityId, request.EventType, request.Template,
             request.Message, request.IdempotencyKey, [], request.Priority)]), cancellationToken);
         var item = result.Notifications[0];
-        return new(item.Id, item.CreatedUtc);
+        return new(item.Id, item.CreatedUtc, result.DeliveryBatchId);
     }
 
     public Task<NotificationBatchResult> CreateBatchAsync(NotificationBatchRequest request, CancellationToken cancellationToken)
     {
         NotificationValidation.Validate(request, options.Value);
-        return ExecuteAsync(request.Notifications, null, [], cancellationToken);
+        return ExecuteAsync(request.Notifications, null, [], request.DeliveryBatchId ?? Guid.NewGuid(), request.DeliveryBatchId.HasValue, cancellationToken);
     }
 
     public async Task<int> AddRecipientsAsync(long eventId, IReadOnlyCollection<RecipientInput> recipients, CancellationToken cancellationToken)
     {
         NotificationValidation.ValidateRecipients(recipients, options.Value);
-        var result = await ExecuteAsync([], eventId, recipients, cancellationToken);
+        var result = await ExecuteAsync([], eventId, recipients, null, false, cancellationToken);
         return result.Notifications[0].AddedRecipients;
     }
 
     private async Task<NotificationBatchResult> ExecuteAsync(IReadOnlyList<NotificationInput> events, long? eventId,
-        IReadOnlyCollection<RecipientInput> recipients, CancellationToken ct)
+        IReadOnlyCollection<RecipientInput> recipients, Guid? deliveryBatchId, bool enforceDeliveryBatchId, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
         try
@@ -51,7 +51,7 @@ public sealed class SqlServerNotificationWriter(
             {
                 try
                 {
-                    var result = await WriteAsync(events, eventId, recipients, ct);
+                    var result = await WriteAsync(events, eventId, recipients, deliveryBatchId, enforceDeliveryBatchId, ct);
                     var added = result.Notifications.Sum(x => x.AddedRecipients);
                     var reused = result.Notifications.Sum(x => x.ExistingRecipients);
                     Inserted.Add(added, new KeyValuePair<string, object?>("kind", "delivery"));
@@ -83,7 +83,7 @@ public sealed class SqlServerNotificationWriter(
     }
 
     private async Task<NotificationBatchResult> WriteAsync(IReadOnlyList<NotificationInput> events, long? eventId,
-        IReadOnlyCollection<RecipientInput> recipients, CancellationToken ct)
+        IReadOnlyCollection<RecipientInput> recipients, Guid? deliveryBatchId, bool enforceDeliveryBatchId, CancellationToken ct)
     {
         // A fresh connection and temporary tables for every attempt; no EF tracking or ambient transaction.
         await using var connection = new SqlConnection(db.Database.GetConnectionString());
@@ -109,19 +109,25 @@ public sealed class SqlServerNotificationWriter(
 
         await using var command = new SqlCommand(InsertSql, connection, transaction);
         command.Parameters.AddWithValue("@eventId", (object?)eventId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@deliveryBatchId", (object?)deliveryBatchId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@enforceDeliveryBatchId", enforceDeliveryBatchId);
         command.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow);
         var results = new List<NotificationWriteResult>();
+        var resolvedBatchId = deliveryBatchId ?? Guid.Empty;
         try
         {
             await using var reader = await command.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
+            {
                 results.Add(new(reader.GetString(0), reader.GetInt64(1), reader.GetFieldValue<DateTimeOffset>(2),
                     reader.GetBoolean(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7)));
+                resolvedBatchId = reader.GetGuid(8);
+            }
         }
-        catch (SqlException ex) when (ex.Number == 51001) { throw new NotificationConflictException(); }
+        catch (SqlException ex) when (ex.Number is 51001 or 51004) { throw new NotificationConflictException(); }
         catch (SqlException ex) when (ex.Number == 51002) { throw new KeyNotFoundException("Notification event was not found."); }
         await transaction.CommitAsync(ct);
-        return new(results.AsReadOnly());
+        return new(results.AsReadOnly(), resolvedBatchId);
     }
 
     private static async Task ExecuteCommandAsync(SqlConnection c, SqlTransaction t, string sql, CancellationToken ct)
@@ -144,7 +150,7 @@ public sealed class SqlServerNotificationWriter(
 
     private const string StageSql = """
         SET XACT_ABORT ON;
-        SELECT TOP (0) CAST(0 AS int) AS Ordinal, EntityId, EventType, Template, Payload, IdempotencyKey, Priority
+        SELECT TOP (0) CAST(0 AS int) AS Ordinal, EntityId, EventType, Template, Payload, IdempotencyKey, Priority, DeliveryBatchId
         INTO #Events FROM dbo.NotificationEvents;
         SELECT TOP (0) CAST(0 AS int) AS Ordinal, CAST(0 AS int) AS EventOrdinal,
           RecipientId, EmailAddress, NormalizedEmailAddress
@@ -175,39 +181,46 @@ public sealed class SqlServerNotificationWriter(
             OR CONVERT(varbinary(max), n.EventType) <> CONVERT(varbinary(max), e.EventType)
             OR CONVERT(varbinary(max), n.Template) <> CONVERT(varbinary(max), e.Template)
             OR CONVERT(varbinary(max), n.Payload) <> CONVERT(varbinary(max), e.Payload)
-            OR n.Priority <> e.Priority)
+            OR n.Priority <> e.Priority
+            OR (@enforceDeliveryBatchId = 1 AND (n.DeliveryBatchId <> @deliveryBatchId OR (n.DeliveryBatchId IS NULL AND @deliveryBatchId IS NOT NULL))))
           THROW 51001, 'Conflicting event content.', 1;
 
         CREATE TABLE #NewEvents(Id bigint PRIMARY KEY);
-        INSERT dbo.NotificationEvents(EntityId, EventType, Template, Payload, IdempotencyKey, Priority, CreatedUtc)
+        INSERT dbo.NotificationEvents(EntityId, EventType, Template, Payload, IdempotencyKey, Priority, DeliveryBatchId, CreatedUtc)
         OUTPUT inserted.Id INTO #NewEvents
-        SELECT e.EntityId, e.EventType, e.Template, e.Payload, e.IdempotencyKey, e.Priority, @now
+        SELECT e.EntityId, e.EventType, e.Template, e.Payload, e.IdempotencyKey, e.Priority, @deliveryBatchId, @now
         FROM #Canonical e
         WHERE e.Ordinal = e.CanonicalOrdinal AND NOT EXISTS (
           SELECT 1 FROM dbo.NotificationEvents n WITH (UPDLOCK, HOLDLOCK) WHERE n.IdempotencyKey = e.IdempotencyKey);
 
-        SELECT e.Ordinal, e.CanonicalOrdinal, n.Id, n.IdempotencyKey, n.CreatedUtc, n.Priority,
+        SELECT e.Ordinal, e.CanonicalOrdinal, n.Id, n.IdempotencyKey, n.CreatedUtc, n.Priority, n.DeliveryBatchId,
           CAST(CASE WHEN added.Id IS NULL THEN 0 ELSE 1 END AS bit) AS Created
         INTO #Map FROM #Canonical e
         JOIN dbo.NotificationEvents n ON n.IdempotencyKey = e.IdempotencyKey
         LEFT JOIN #NewEvents added ON added.Id = n.Id;
         IF @eventId IS NOT NULL
         BEGIN
-          INSERT #Map(Ordinal, CanonicalOrdinal, Id, IdempotencyKey, CreatedUtc, Priority, Created)
-          SELECT 0, 0, Id, IdempotencyKey, CreatedUtc, Priority, 0
+          INSERT #Map(Ordinal, CanonicalOrdinal, Id, IdempotencyKey, CreatedUtc, Priority, DeliveryBatchId, Created)
+          SELECT 0, 0, Id, IdempotencyKey, CreatedUtc, Priority, DeliveryBatchId, 0
           FROM dbo.NotificationEvents WITH (UPDLOCK, HOLDLOCK) WHERE Id = @eventId;
           IF @@ROWCOUNT = 0 THROW 51002, 'Event missing.', 1;
         END;
 
-        SELECT r.*, m.Id AS EventId, m.Priority AS EventPriority,
+        DECLARE @resolvedDeliveryBatchId uniqueidentifier;
+        SELECT TOP (1) @resolvedDeliveryBatchId = DeliveryBatchId FROM #Map;
+        IF @resolvedDeliveryBatchId IS NULL OR EXISTS (
+          SELECT 1 FROM #Map WHERE DeliveryBatchId IS NULL OR DeliveryBatchId <> @resolvedDeliveryBatchId)
+          THROW 51004, 'Notification events belong to different delivery batches.', 1;
+
+        SELECT r.*, m.Id AS EventId, m.Priority AS EventPriority, m.DeliveryBatchId AS EventDeliveryBatchId,
           ROW_NUMBER() OVER (PARTITION BY m.Id, r.NormalizedEmailAddress ORDER BY r.Ordinal) AS Position
         INTO #UniqueRecipients FROM #Recipients r JOIN #Map m ON m.Ordinal = r.EventOrdinal;
         CREATE INDEX IX_UniqueRecipients_Key ON #UniqueRecipients(EventId, NormalizedEmailAddress);
         CREATE TABLE #AddedDeliveries(EventId bigint NOT NULL);
         INSERT dbo.NotificationDeliveries(NotificationEventId, RecipientId, EmailAddress, NormalizedEmailAddress,
-            Priority, Status, Attempts, CreatedUtc)
+            Priority, DeliveryBatchId, Status, Attempts, CreatedUtc)
         OUTPUT inserted.NotificationEventId INTO #AddedDeliveries
-        SELECT r.EventId, r.RecipientId, r.EmailAddress, r.NormalizedEmailAddress, r.EventPriority, 0, 0, @now
+        SELECT r.EventId, r.RecipientId, r.EmailAddress, r.NormalizedEmailAddress, r.EventPriority, r.EventDeliveryBatchId, 0, 0, @now
         FROM #UniqueRecipients r
         WHERE r.Position = 1 AND NOT EXISTS (
           SELECT 1 FROM dbo.NotificationDeliveries d WITH (UPDLOCK, HOLDLOCK)
@@ -215,7 +228,7 @@ public sealed class SqlServerNotificationWriter(
 
         SELECT m.IdempotencyKey, m.Id, m.CreatedUtc, m.Created,
           COALESCE(a.Added, 0), COALESCE(r.UniqueCount, 0) - COALESCE(a.Added, 0),
-          COALESCE(r.TotalCount, 0) - COALESCE(r.UniqueCount, 0), e.TotalCount - 1
+          COALESCE(r.TotalCount, 0) - COALESCE(r.UniqueCount, 0), e.TotalCount - 1, m.DeliveryBatchId
         FROM #Map m
         JOIN (SELECT Id, COUNT(*) AS TotalCount FROM #Map GROUP BY Id) e ON e.Id = m.Id
         LEFT JOIN (SELECT EventId, COUNT(*) AS Added FROM #AddedDeliveries GROUP BY EventId) a ON a.EventId = m.Id

@@ -25,10 +25,11 @@ Queue 100 low-rate bulk-delivery messages, split evenly between the Alice and Bo
 
 ## Bulk notification creation
 
-`POST /api/notifications/batch` creates many events and recipients atomically. It returns 200 after commit, with per-event IDs and inserted/existing/duplicate counts:
+`POST /api/notifications/batch` creates many events and recipients atomically. It returns 200 after commit, with a `deliveryBatchId`, per-event IDs, and inserted/existing/duplicate counts. A client that may retry after a lost response should include a stable `deliveryBatchId` in its request:
 
 ```json
 {
+  "deliveryBatchId": "e1a9dfd7-c4a9-4a06-9059-1954d3d0747f",
   "notifications": [
     {
       "entityId": "f177b6da-6968-411a-b4f1-aae4b9e8b948",
@@ -45,6 +46,8 @@ Queue 100 low-rate bulk-delivery messages, split evenly between the Alice and Bo
   ]
 }
 ```
+
+Retrieve progress with `GET /api/email-delivery/status/{deliveryBatchId}`. The response contains `total`, `pending`, `processing`, `retrying`, `delivered`, `failed`, `completed`, `progress`, and `isComplete`. It returns 404 when no persisted deliveries belong to that ID; legacy deliveries created before batch correlation remain intentionally unavailable through this endpoint.
 
 Default `Notifications:Ingestion` settings are MaximumEvents=10000, MaximumRecipients=10000 (total input entries), and MaximumRequestBytes=10485760. The body limit applies to notification POST endpoints, including chunked requests on Kestrel. A single event may use the whole recipient allowance. Larger imports must be split into separate atomic requests.
 

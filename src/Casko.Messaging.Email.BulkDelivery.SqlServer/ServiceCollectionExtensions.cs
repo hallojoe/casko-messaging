@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<NotificationDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<INotificationWriter, SqlServerNotificationWriter>();
         services.AddScoped<INotificationQueueStore, SqlServerNotificationQueueStore>();
+        services.AddScoped<INotificationDeliveryStatus, SqlServerNotificationDeliveryStatus>();
         services.AddScoped<INotificationStoreInitializer, SqlServerNotificationStoreInitializer>();
         return services;
     }

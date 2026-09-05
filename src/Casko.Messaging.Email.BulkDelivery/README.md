@@ -7,6 +7,7 @@ Provider-independent contracts and validation for durable bulk email delivery.
 - `INotificationWriter` creates events, appends recipients, and atomically creates notification batches.
 - `INotificationQueueStore` claims deliveries and guards updates with live lease ownership.
 - `INotificationStoreInitializer` initializes provider-owned persistence.
+- `INotificationDeliveryStatus` returns database-aggregated progress for a logical delivery batch.
 - Requests/results, normalization, validation and status values are shared; no EF or database-driver dependencies.
 
 ## Delivery lifecycle
@@ -48,7 +49,11 @@ Each event also has an immutable Priority: `Bulk` (0), `Normal` (1, the default)
 
 Recipient identity is the event ID plus trim/uppercase-normalized email address. Input duplicates retain the first RecipientId/address; existing delivery metadata is never overwritten. A batch result contains one entry per distinct event key, with ID, creation timestamp, Created, AddedRecipients, ExistingRecipients, DuplicateRecipients, and DuplicateEvents. Recipient duplicates are counted across repeated event inputs too.
 
-Counts describe the committed attempt. Retrying after a lost response can return Created=false and existing-recipient counts. There is no persistent batch ID or batch status resource. Split larger imports into bounded requests; atomicity applies to each request separately.
+Every `NotificationBatchRequest` has a `DeliveryBatchId`. Supply a caller-generated ID when a client may retry after a lost response; otherwise the writer generates one and returns it in `NotificationBatchResult`. All deliveries created by that request retain the same ID. `INotificationDeliveryStatus` exposes a single aggregate query with total, state counts, completed count, percentage, and completion state; it returns `null` for an unknown batch.
+
+Counts describe the committed attempt. Retrying after a lost response can return Created=false and existing-recipient counts. A retry that supplies the same batch ID must contain the same event content. A request which combines events belonging to different delivery batches is rejected instead of silently creating an ambiguous status group. Split larger imports into bounded requests; atomicity applies to each request separately.
+
+Pre-batch historical rows intentionally remain uncorrelated: providers must not invent a delivery-batch mapping for them. They therefore cannot be queried through the batch-status contract.
 
 ## Future providers
 
