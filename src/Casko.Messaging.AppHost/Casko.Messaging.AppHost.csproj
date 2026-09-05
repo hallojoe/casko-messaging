@@ -6,6 +6,7 @@
     <ProjectReference Include="../Casko.Messaging.Email.Worker/Casko.Messaging.Email.Worker.csproj" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.MailPit" />
     <PackageReference Include="MessagePack" />
+    <PackageReference Include="Scalar.Aspire" />
     <PackageReference Include="Aspire.Hosting.SqlServer" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" />
   </ItemGroup>

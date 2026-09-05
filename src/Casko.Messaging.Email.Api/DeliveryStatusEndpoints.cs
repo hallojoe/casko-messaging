@@ -13,6 +13,8 @@ public static class DeliveryStatusEndpoints
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
         .WithName("GetDeliveryBatchStatus")
+        .WithSummary("Get delivery-batch progress")
+        .WithDescription("Returns current database-aggregated delivery state for a committed batch.")
         .Produces<DeliveryBatchStatus>()
         .Produces(StatusCodes.Status404NotFound);
     }

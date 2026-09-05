@@ -63,6 +63,19 @@ public sealed class NotificationApiTests
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, oversized.StatusCode);
     }
 
+    [Fact]
+    public async Task Development_openapi_document_includes_documented_notification_endpoints()
+    {
+        using var factory = Factory();
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("3.1.1", document.RootElement.GetProperty("openapi").GetString());
+        Assert.Equal("Create an atomic notification batch", document.RootElement
+            .GetProperty("paths").GetProperty("/api/notifications/batch").GetProperty("post").GetProperty("summary").GetString());
+    }
+
     private sealed class FakeWriter : INotificationWriter
     {
         public Task<NotificationEventResult> CreateEventAsync(CreateNotificationEventRequest request, CancellationToken ct)

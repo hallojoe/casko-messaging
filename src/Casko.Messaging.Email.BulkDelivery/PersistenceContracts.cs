@@ -39,7 +39,7 @@ public sealed record NotificationWriteResult(string IdempotencyKey, long Id, Dat
 /// <summary>Reports the committed outcome of an atomic notification batch.</summary>
 /// <param name="Notifications">One result for each distinct notification event key.</param>
 /// <param name="DeliveryBatchId">The stable identifier for the logical delivery batch.</param>
-public sealed record NotificationBatchResult(IReadOnlyList<NotificationWriteResult> Notifications, Guid DeliveryBatchId = default);
+public sealed record NotificationBatchResult(IReadOnlyList<NotificationWriteResult> Notifications, Guid DeliveryBatchId);
 
 /// <summary>Reports the current aggregate state of one persisted delivery batch.</summary>
 /// <param name="DeliveryBatchId">The identifier of the batch queried.</param>

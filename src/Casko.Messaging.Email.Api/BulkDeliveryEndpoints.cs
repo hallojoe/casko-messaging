@@ -36,12 +36,30 @@ public static class BulkDeliveryEndpoints
         {
             var notification = await writer.CreateEventAsync(request, ct);
             return Results.Accepted($"/api/notifications/{notification.Id}", new { notification.Id, notification.CreatedUtc, notification.DeliveryBatchId });
-        });
+        })
+        .WithName("CreateNotification")
+        .WithSummary("Create one notification event")
+        .WithDescription("Creates an idempotent notification event and returns its delivery-batch identifier.")
+        .Produces(StatusCodes.Status202Accepted);
         group.MapPost("/batch", async (NotificationBatchRequest request, INotificationWriter writer, CancellationToken ct) =>
-            Results.Ok(await writer.CreateBatchAsync(request, ct)));
+            Results.Ok(await writer.CreateBatchAsync(request, ct)))
+            .WithName("CreateNotificationBatch")
+            .WithSummary("Create an atomic notification batch")
+            .WithDescription("Creates all notification events and recipient deliveries in one transaction.")
+            .Produces<NotificationBatchResult>()
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status409Conflict);
         group.MapPost("/{eventId:long}/recipients", async (long eventId, IReadOnlyCollection<RecipientInput> recipients,
-            INotificationWriter writer, CancellationToken ct) => Results.Ok(new { added = await writer.AddRecipientsAsync(eventId, recipients, ct) }));
+            INotificationWriter writer, CancellationToken ct) => Results.Ok(new { added = await writer.AddRecipientsAsync(eventId, recipients, ct) }))
+            .WithName("AddNotificationRecipients")
+            .WithSummary("Add recipients to a notification")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
         group.MapPost("/deliveries/{deliveryId:long}/retry", async (long deliveryId, INotificationQueueStore store, CancellationToken ct) =>
-            await store.RetryAsync(deliveryId, ct) ? Results.Accepted() : Results.NotFound());
+            await store.RetryAsync(deliveryId, ct) ? Results.Accepted() : Results.NotFound())
+            .WithName("RetryNotificationDelivery")
+            .WithSummary("Retry a failed notification delivery")
+            .Produces(StatusCodes.Status202Accepted)
+            .Produces(StatusCodes.Status404NotFound);
     }
 }

@@ -15,9 +15,12 @@ public static class DemoFlowsEndpoints
 {
     public static void MapDemoFlowsEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/notifications/demo/test-inboxes", QueueBulkInboxDemoAsync);
-        app.MapPost("/email/support/seed", SeedSupportConversationAsync);
-        app.MapPost("/email/demo/seed", SeedInboxDemoAsync).WithTags("Demo data");
+        app.MapPost("/api/notifications/demo/test-inboxes", QueueBulkInboxDemoAsync)
+            .WithTags("Demo data").WithName("QueueBulkInboxDemo").WithSummary("Queue bulk inbox demo messages").Produces(StatusCodes.Status202Accepted);
+        app.MapPost("/email/support/seed", SeedSupportConversationAsync)
+            .WithTags("Demo data").WithName("SeedSupportConversation").WithSummary("Seed a support conversation").Produces(StatusCodes.Status201Created);
+        app.MapPost("/email/demo/seed", SeedInboxDemoAsync)
+            .WithTags("Demo data").WithName("SeedInboxDemo").WithSummary("Seed inbox demo conversations").Produces(StatusCodes.Status201Created);
     }
 
     private static async Task<IResult> QueueBulkInboxDemoAsync(INotificationWriter writer, CancellationToken ct)

@@ -1,6 +1,6 @@
 # Casko.Messaging.AppHost
 
-Aspire AppHost for the solution’s development-only mail infrastructure.
+Aspire AppHost for the solution’s development-only mail infrastructure and Scalar API reference.
 
 ## Resources
 
@@ -20,4 +20,4 @@ The bulk-email worker sends through GreenMail in Aspire so `POST /api/notificati
 dotnet run --project src/Casko.Messaging.AppHost
 ```
 
-Open the Aspire dashboard and use the MailPit and Roundcube HTTP endpoints. Container configuration belongs here, not in the core abstraction or MailKit adapter. The Roundcube config override deliberately disables SMTP authentication because local MailPit accepts unauthenticated SMTP.
+Open the Aspire dashboard and use the MailPit, Roundcube, and Scalar HTTP endpoints. Scalar is an AppHost-only development resource that reads the API's Development-only `/openapi/v1.json` document and proxies interactive requests to the email API; the API itself has no Scalar UI dependency. Container configuration belongs here, not in the core abstraction or MailKit adapter. The Roundcube config override deliberately disables SMTP authentication because local MailPit accepts unauthenticated SMTP.

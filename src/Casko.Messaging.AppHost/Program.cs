@@ -1,3 +1,5 @@
+using Scalar.Aspire;
+
 var builder = DistributedApplication.CreateBuilder(args);
 var sqlPassword = builder.AddParameter("sql-password", secret: true);
 
@@ -27,7 +29,7 @@ var roundcube = builder.AddContainer("roundcube", "roundcube/roundcubemail")
     .WaitFor(greenmail)
     .WaitFor(mailpit);
 
-builder.AddProject<Projects.Casko_Messaging_Email_Api>("email-api")
+var emailApi = builder.AddProject<Projects.Casko_Messaging_Email_Api>("email-api")
     .WithReference(notifications)
     .WithReference(mailpit)
     .WithEnvironment("Email__MailKit__Mailboxes__Support__Address", "alice@example.test")
@@ -49,6 +51,9 @@ builder.AddProject<Projects.Casko_Messaging_Email_Api>("email-api")
     .WaitFor(notifications)
     .WaitFor(mailpit)
     .WaitFor(greenmail);
+
+builder.AddScalarApiReference()
+    .WithApiReference(emailApi);
 
 builder.AddProject<Projects.Casko_Messaging_Email_Worker>("email-worker")
     .WithReference(notifications)
