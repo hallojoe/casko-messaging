@@ -1,13 +1,16 @@
-@if (Depth > 0)
-{
-    <div class="thread-branch" style="margin-left: @(Math.Min(Depth, 3) * 20)px">
-        @MessageCard
-    </div>
-}
-else
-{
+<div class="thread-node @(Depth == 0 ? "thread-node-root" : "")">
     @MessageCard
-}
+
+    @if (Message.Children.Count > 0)
+    {
+        <div class="thread-children">
+            @foreach (var child in Message.Children)
+            {
+                <MessageNode Message="child" Depth="@(Depth + 1)" />
+            }
+        </div>
+    }
+</div>
 
 @code {
     [Parameter, EditorRequired] public required EmailThreadMessageResponse Message { get; set; }
@@ -39,10 +42,6 @@ else
                     <MudChip T="string" Value="@attachment.FileName" Size="Size.Small">@attachment.FileName (@attachment.ContentType)</MudChip>
                 }
             </MudChipSet>
-        }
-        @foreach (var child in Message.Children)
-        {
-            <MessageNode Message="child" Depth="@(Depth + 1)" />
         }
     </MudPaper>;
 }

@@ -9,7 +9,6 @@ Run through `Casko.Messaging.AppHost` for automatic MailPit and GreenMail config
 ## Endpoints and requests
 
 `Email.Single.http` and `Email.Scenarios.http` contain ready-to-run sample requests. The API covers basic delivery, recipient variants, attachments, inline images, personalized messages, IMAP reads, reply discovery, and seeded support conversations.
-
 ## Inbox viewer and OpenAPI
 
 The root URL serves an interactive MudBlazor inbox viewer. It discovers configured logical mailboxes, lists their mailbox-local threads, and displays a selected thread as a nested conversation. In the Aspire development environment, `Support` uses Alice's GreenMail inbox and `Sales` uses Bob's.
@@ -21,6 +20,39 @@ Seed both demo inboxes with `POST /email/demo/seed`. The viewer-ready endpoints 
 - `GET /api/mailboxes/{mailbox}/threads/{threadId}`
 
 The .NET 10 OpenAPI document is available in Development at `/openapi/v1.json`.
+
+Queue 100 low-rate bulk-delivery messages, split evenly between the Alice and Bob GreenMail inboxes, with `POST /api/notifications/demo/test-inboxes`.
+
+## Bulk notification creation
+
+`POST /api/notifications/batch` creates many events and recipients atomically. It returns 200 after commit, with per-event IDs and inserted/existing/duplicate counts:
+
+```json
+{
+  "notifications": [
+    {
+      "entityId": "f177b6da-6968-411a-b4f1-aae4b9e8b948",
+      "eventType": "OrderUpdated",
+      "template": "order-update",
+      "message": { "subject": "Order update", "text": "Your order has shipped.", "html": null },
+      "idempotencyKey": "order-123-shipped",
+      "priority": "Normal",
+      "recipients": [
+        { "emailAddress": "alice@example.test", "recipientId": null },
+        { "emailAddress": "bob@example.test", "recipientId": null }
+      ]
+    }
+  ]
+}
+```
+
+Default `Notifications:Ingestion` settings are MaximumEvents=10000, MaximumRecipients=10000 (total input entries), and MaximumRequestBytes=10485760. The body limit applies to notification POST endpoints, including chunked requests on Kestrel. A single event may use the whole recipient allowance. Larger imports must be split into separate atomic requests.
+
+The original create-event and append-recipient routes remain available with their original response shapes; recipient append now uses bulk persistence and the configured recipient limit.
+
+Repeated keys with identical event content reuse events and add only missing recipients. Reusing a key with different content returns 409. Invalid fields/limits return 400, oversized bodies 413, and missing events 404. A failed batch commits nothing. Retries after a lost response may return existing counts. See the shared and SQL Server provider READMEs for identity and transaction guarantees.
+
+Use `priority: "Critical"` for password-reset and security messages, `"Normal"` for normal transactional mail, and `"Bulk"` for campaigns. Priorities are immutable for an idempotency key. The worker reserves a critical lane so bulk work cannot claim that capacity.
 
 ## Configuration
 

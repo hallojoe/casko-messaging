@@ -1,8 +1,12 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.4.0">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+﻿<Project Sdk="Aspire.AppHost.Sdk/13.5.0">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AspireUseCliBundle>true</AspireUseCliBundle><UserSecretsId>0c7e13de-27d6-4a71-b325-a5acd7566b3f</UserSecretsId>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Casko.Messaging.Email.Api/Casko.Messaging.Email.Api.csproj" />
-    <PackageReference Include="CommunityToolkit.Aspire.Hosting.MailPit" Version="13.4.0" />
-    <PackageReference Include="MessagePack" Version="3.1.8" />
+    <ProjectReference Include="../Casko.Messaging.Email.Worker/Casko.Messaging.Email.Worker.csproj" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.MailPit" />
+    <PackageReference Include="MessagePack" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" />
   </ItemGroup>
 </Project>

@@ -11,6 +11,7 @@ using Casko.Messaging.Email.MailKit.DependencyInjection;
 using Casko.Messaging.Email.Reading;
 using Casko.Messaging.Email.Recipients;
 using Casko.Messaging.Email.Threading;
+using Casko.Messaging.Email.BulkDelivery;
 using Casko.OpenTelemetry.Extensions.AspNetCore;
 using Ganss.Xss;
 using MailKit.Net.Smtp;
@@ -18,6 +19,7 @@ using MailKit.Security;
 using MimeKit;
 using MimeKit.Utils;
 using MudBlazor.Services;
+using Casko.Messaging.Email.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,7 +46,15 @@ builder.Services.AddMailKitEmail(builder.Configuration.GetSection("Email:MailKit
 builder.Services.AddSingleton<IEmailThreadBuilder, EmailThreadBuilder>();
 builder.Services.AddSingleton<HtmlSanitizer>();
 builder.Services.AddScoped<InboxQueryService>();
+builder.Services.AddSqlServerNotifications(builder.Configuration.GetConnectionString("notifications"));
+builder.Services.Configure<NotificationIngestionOptions>(builder.Configuration.GetSection("Notifications:Ingestion"));
 var app = builder.Build();
+
+if (builder.Configuration.GetValue("Notifications:ApplyMigrations", true))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<INotificationStoreInitializer>().InitializeAsync();
+}
 
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseAntiforgery();
@@ -58,6 +68,8 @@ app.MapPost("/email/single", async (IEmailSender sender, CancellationToken cance
     var result = await sender.SendAsync(alice, new EmailMessage { Subject = "Single email", Text = "This is a plain-text email." }, cancellationToken);
     return Results.Accepted(value: result);
 });
+
+app.MapNotificationEndpoints();
 
 app.MapPost("/email/multiple-recipients", async (IEmailSender sender, CancellationToken cancellationToken) =>
 {

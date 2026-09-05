@@ -4,6 +4,9 @@
     <Project Path="src/Casko.Messaging.Email.Api/Casko.Messaging.Email.Api.csproj" />
     <Project Path="src/Casko.Messaging.Email.MailKit/Casko.Messaging.Email.MailKit.csproj" />
     <Project Path="src/Casko.Messaging.Email/Casko.Messaging.Email.csproj" />
+    <Project Path="src/Casko.Messaging.Email.BulkDelivery/Casko.Messaging.Email.BulkDelivery.csproj" />
+    <Project Path="src/Casko.Messaging.Email.BulkDelivery.SqlServer/Casko.Messaging.Email.BulkDelivery.SqlServer.csproj" />
+    <Project Path="src/Casko.Messaging.Email.Worker/Casko.Messaging.Email.Worker.csproj" />
     <Project Path="tests/Casko.Messaging.Email.Tests/Casko.Messaging.Email.Tests.csproj" />
   </Folder>
 </Solution>

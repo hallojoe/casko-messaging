@@ -56,7 +56,8 @@ public sealed class InboxApiTests
                 ["Email:MailKit:Host"] = "localhost",
                 ["Email:MailKit:FromAddress"] = "noreply@example.test",
                 ["Email:MailKit:Mailboxes:Support:Address"] = "alice@example.test",
-                ["Email:MailKit:Mailboxes:Support:Host"] = "localhost"
+                ["Email:MailKit:Mailboxes:Support:Host"] = "localhost",
+                ["Notifications:ApplyMigrations"] = "false"
             }))
             .ConfigureServices(services =>
             {
